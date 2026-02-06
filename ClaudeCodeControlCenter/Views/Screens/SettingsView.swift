@@ -76,8 +76,25 @@ struct GeneralSettingsTab: View {
 struct AgentSettingsTab: View {
     @EnvironmentObject var store: AppStore
     
+    private var isDefaultCommand: Bool {
+        store.settings.agentCommandTemplate.contains("Configure your agent command")
+    }
+    
     var body: some View {
         Form {
+            // Warning if using default command
+            if isDefaultCommand {
+                Section {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Configure your AI agent command below to get started")
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            
             Section {
                 TextField("Command Template", text: $store.settings.agentCommandTemplate, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
@@ -100,18 +117,35 @@ struct AgentSettingsTab: View {
             }
             
             Section {
-                Text("Built-in Test Agent")
-                    .font(.headline)
-                Text("For testing, use this echo agent command:")
-                    .foregroundColor(.secondary)
-                
-                GroupBox {
-                    Text("echo 'Agent running in {{mode}} mode at {{worktree}}' && sleep 3 && echo 'Done!'")
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Example Configurations")
+                        .font(.headline)
+                    
+                    AgentPresetButton(
+                        name: "Claude Code",
+                        command: "claude --print \"$(cat '{{promptFile}}')\" {{nonInteractiveFlag}}",
+                        flag: "--dangerously-skip-permissions",
+                        store: store
+                    )
+                    
+                    AgentPresetButton(
+                        name: "Aider",
+                        command: "aider --yes-always --message-file '{{promptFile}}'",
+                        flag: "",
+                        store: store
+                    )
+                    
+                    AgentPresetButton(
+                        name: "Test (Echo)",
+                        command: "echo 'Agent running in {{mode}} mode at {{worktree}}' && cat '{{promptFile}}' && sleep 2 && echo 'Done!'",
+                        flag: "",
+                        store: store
+                    )
                 }
             } header: {
-                Text("Testing")
+                Text("Presets")
+            } footer: {
+                Text("Click to apply a preset configuration")
             }
         }
         .formStyle(.grouped)
@@ -119,6 +153,37 @@ struct AgentSettingsTab: View {
         .onChange(of: store.settings) { _, _ in
             store.saveSettings()
         }
+    }
+}
+
+struct AgentPresetButton: View {
+    let name: String
+    let command: String
+    let flag: String
+    let store: AppStore
+    
+    var body: some View {
+        Button {
+            store.settings.agentCommandTemplate = command
+            store.settings.nonInteractiveFlag = flag
+            store.saveSettings()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .fontWeight(.medium)
+                    Text(command)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "arrow.right.circle")
+                    .foregroundColor(.accentColor)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 

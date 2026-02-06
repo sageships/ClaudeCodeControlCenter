@@ -12,7 +12,12 @@ struct AppSettings: Codable, Equatable {
     var terminalCommand: String
     
     static let `default` = AppSettings(
-        agentCommandTemplate: "claude --worktree {{worktree}} --prompt-file {{promptFile}} {{nonInteractiveFlag}}",
+        // Default template - users should customize for their agent
+        // Examples:
+        //   Claude Code: claude --print "$(cat '{{promptFile}}')" {{nonInteractiveFlag}}
+        //   Aider: aider --yes-always --message-file '{{promptFile}}'
+        //   Cursor: cursor '{{worktree}}'
+        agentCommandTemplate: "echo 'Configure your agent command in Settings. Worktree: {{worktree}}' && cat '{{promptFile}}'",
         plannerPromptTemplate: """
         You are a planning agent. Analyze the task and create a detailed implementation plan.
         
@@ -36,7 +41,7 @@ struct AppSettings: Codable, Equatable {
         
         Execute the plan step by step.
         """,
-        nonInteractiveFlag: "--dangerously-skip-permissions",
+        nonInteractiveFlag: "--yes",
         blockedTimeoutMinutes: 3,
         maxConcurrentSessions: 1,
         defaultWorktreesRoot: "~/Worktrees/ClaudeControlCenter",

@@ -263,14 +263,19 @@ class AppStore: ObservableObject {
             command = command.replacingOccurrences(of: "{{nonInteractiveFlag}}", with: "")
         }
         
+        // Clean up extra whitespace from placeholder removal
+        command = command.components(separatedBy: .whitespaces)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        
         // Update session state
         updateSession(session.id) { s in
             s.startedAt = Date()
             s.lastActivityAt = Date()
         }
         
-        // Run the command
-        let arguments = command.components(separatedBy: " ").filter { !$0.isEmpty }
+        // Run via shell to properly handle quoted paths and complex commands
+        let arguments = ["bash", "-c", command]
         
         do {
             try shell.runWithStreaming(
@@ -320,7 +325,7 @@ class AppStore: ObservableObject {
     }
     
     private func handleSessionComplete(_ sessionId: UUID, exitCode: Int32) {
-        guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
+        guard sessions.contains(where: { $0.id == sessionId }) else { return }
         
         updateSession(sessionId) { s in
             s.exitCode = exitCode

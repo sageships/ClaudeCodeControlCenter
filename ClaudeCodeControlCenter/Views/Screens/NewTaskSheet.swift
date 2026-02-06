@@ -8,6 +8,7 @@ struct NewTaskSheet: View {
     @State private var title = ""
     @State private var baseBranch = ""
     @State private var branchName = ""
+    @State private var branchNameManuallyEdited = false  // Track if user manually edited
     @State private var mode: TaskMode = .planFirst
     @State private var useCustomCommand = false
     @State private var customCommand = ""
@@ -39,7 +40,8 @@ struct NewTaskSheet: View {
                     TextField("Task Title", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: title) { _, newValue in
-                            if branchName.isEmpty || branchName == WorkTask.suggestBranchName(from: title.dropLast().description) {
+                            // Only auto-update branch name if user hasn't manually edited it
+                            if !branchNameManuallyEdited {
                                 branchName = WorkTask.suggestBranchName(from: newValue)
                             }
                         }
@@ -59,8 +61,30 @@ struct NewTaskSheet: View {
                 }
                 
                 Section {
-                    TextField("Branch Name", text: $branchName)
-                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        TextField("Branch Name", text: $branchName)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: branchName) { oldValue, newValue in
+                                // Mark as manually edited if different from auto-suggestion
+                                let suggested = WorkTask.suggestBranchName(from: title)
+                                if newValue != suggested && !newValue.isEmpty {
+                                    branchNameManuallyEdited = true
+                                }
+                            }
+                        
+                        // Reset button to regenerate from title
+                        if branchNameManuallyEdited {
+                            Button {
+                                branchNameManuallyEdited = false
+                                branchName = WorkTask.suggestBranchName(from: title)
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Reset to auto-generated name")
+                        }
+                    }
                 } header: {
                     Text("New Branch Name")
                 } footer: {

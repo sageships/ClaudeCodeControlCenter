@@ -1,0 +1,276 @@
+#!/bin/bash
+# CCCC - Claude Code Control Center CLI
+# A working alternative to the buggy GUI
+
+set -e
+
+WORKTREES_ROOT="${CCCC_WORKTREES:-$HOME/Worktrees/ClaudeControlCenter}"
+CLAUDE_PATH="${CCCC_CLAUDE:-/opt/homebrew/bin/claude}"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+usage() {
+    echo -e "${BLUE}CCCC - Claude Code Control Center CLI${NC}"
+    echo ""
+    echo "Usage: cccc <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  new <repo> <task-name> <description>  Create new task with worktree"
+    echo "  plan <task-name>                      Run planner for task"
+    echo "  execute <task-name>                   Execute approved plan"
+    echo "  status <task-name>                    Show task status"
+    echo "  list                                  List all tasks"
+    echo "  delete <task-name>                    Delete task and worktree"
+    echo "  logs <task-name>                      Tail logs for task"
+    echo ""
+    echo "Examples:"
+    echo "  cccc new ~/code/myrepo add-auth 'Add user authentication with JWT'"
+    echo "  cccc plan add-auth"
+    echo "  cccc execute add-auth"
+}
+
+task_dir() {
+    echo "$WORKTREES_ROOT/$1"
+}
+
+new_task() {
+    local repo="$1"
+    local task_name="$2"
+    local description="$3"
+    
+    if [[ -z "$repo" || -z "$task_name" || -z "$description" ]]; then
+        echo -e "${RED}Usage: cccc new <repo> <task-name> <description>${NC}"
+        exit 1
+    fi
+    
+    local worktree_path="$WORKTREES_ROOT/$task_name"
+    local branch_name="task/$task_name"
+    
+    echo -e "${BLUE}Creating task: $task_name${NC}"
+    echo -e "Description: $description"
+    echo -e "Worktree: $worktree_path"
+    echo ""
+    
+    # Create worktree
+    mkdir -p "$WORKTREES_ROOT"
+    cd "$repo"
+    git fetch --all --prune
+    
+    if git worktree list | grep -q "$worktree_path"; then
+        echo -e "${YELLOW}Worktree already exists${NC}"
+    else
+        git worktree add "$worktree_path" -b "$branch_name" origin/main
+        echo -e "${GREEN}✓ Worktree created${NC}"
+    fi
+    
+    # Save task metadata
+    mkdir -p "$worktree_path/.cccc"
+    echo "$description" > "$worktree_path/.cccc/description.txt"
+    echo "pending" > "$worktree_path/.cccc/status"
+    
+    echo ""
+    echo -e "${GREEN}Task created! Next: cccc plan $task_name${NC}"
+}
+
+run_planner() {
+    local task_name="$1"
+    local worktree_path="$(task_dir $task_name)"
+    
+    if [[ ! -d "$worktree_path" ]]; then
+        echo -e "${RED}Task not found: $task_name${NC}"
+        exit 1
+    fi
+    
+    local description=$(cat "$worktree_path/.cccc/description.txt")
+    
+    echo -e "${BLUE}Running planner for: $task_name${NC}"
+    echo -e "Description: $description"
+    echo ""
+    
+    # Create prompt
+    local prompt="## Task: $task_name
+
+## Description:
+$description
+
+## Instructions:
+You are a planning agent. Analyze the task and create a detailed implementation plan.
+
+Output a plan to PLAN.md with:
+1. Scope summary
+2. File-level changes (list each file to create/modify/delete)
+3. Risks and unknowns
+4. Test plan
+5. Ordered checklist of steps
+
+Do NOT implement anything. Only create the plan."
+    
+    cd "$worktree_path"
+    echo "planning" > ".cccc/status"
+    
+    # Run Claude with proper output
+    echo -e "${YELLOW}Starting Claude planner...${NC}"
+    echo ""
+    
+    $CLAUDE_PATH --print "$prompt" --output-format text --dangerously-skip-permissions 2>&1 | tee ".cccc/planner.log"
+    
+    if [[ -f "PLAN.md" ]]; then
+        echo ""
+        echo -e "${GREEN}✓ Plan created!${NC}"
+        echo "awaiting_approval" > ".cccc/status"
+        echo ""
+        echo -e "Review: ${BLUE}cat $worktree_path/PLAN.md${NC}"
+        echo -e "Approve: ${BLUE}cccc execute $task_name${NC}"
+    else
+        echo ""
+        echo -e "${RED}✗ No PLAN.md created${NC}"
+        echo "failed" > ".cccc/status"
+    fi
+}
+
+run_executor() {
+    local task_name="$1"
+    local worktree_path="$(task_dir $task_name)"
+    
+    if [[ ! -f "$worktree_path/PLAN.md" ]]; then
+        echo -e "${RED}No PLAN.md found. Run planner first: cccc plan $task_name${NC}"
+        exit 1
+    fi
+    
+    local description=$(cat "$worktree_path/.cccc/description.txt")
+    
+    echo -e "${BLUE}Executing plan for: $task_name${NC}"
+    echo ""
+    
+    local prompt="## Task: $task_name
+
+## Description:
+$description
+
+## Plan:
+$(cat $worktree_path/PLAN.md)
+
+## Instructions:
+You are an executor agent. Follow the implementation plan in PLAN.md exactly.
+
+Constraints:
+- Keep changes minimal
+- Do not change tech stack unless required
+- Update/add tests where appropriate
+- Follow the checklist order
+
+Execute the plan step by step."
+    
+    cd "$worktree_path"
+    echo "executing" > ".cccc/status"
+    
+    echo -e "${YELLOW}Starting Claude executor...${NC}"
+    echo ""
+    
+    $CLAUDE_PATH --print "$prompt" --output-format text --dangerously-skip-permissions 2>&1 | tee ".cccc/executor.log"
+    
+    echo ""
+    echo -e "${GREEN}✓ Execution complete!${NC}"
+    echo "completed" > ".cccc/status"
+}
+
+show_status() {
+    local task_name="$1"
+    local worktree_path="$(task_dir $task_name)"
+    
+    if [[ ! -d "$worktree_path" ]]; then
+        echo -e "${RED}Task not found: $task_name${NC}"
+        exit 1
+    fi
+    
+    local status=$(cat "$worktree_path/.cccc/status" 2>/dev/null || echo "unknown")
+    local description=$(cat "$worktree_path/.cccc/description.txt" 2>/dev/null || echo "No description")
+    
+    echo -e "${BLUE}Task: $task_name${NC}"
+    echo -e "Status: $status"
+    echo -e "Description: $description"
+    echo -e "Path: $worktree_path"
+    
+    if [[ -f "$worktree_path/PLAN.md" ]]; then
+        echo -e "Plan: ${GREEN}✓ exists${NC}"
+    else
+        echo -e "Plan: ${YELLOW}not created${NC}"
+    fi
+}
+
+list_tasks() {
+    echo -e "${BLUE}Tasks in $WORKTREES_ROOT:${NC}"
+    echo ""
+    
+    if [[ ! -d "$WORKTREES_ROOT" ]]; then
+        echo "No tasks found"
+        return
+    fi
+    
+    for task_dir in "$WORKTREES_ROOT"/*; do
+        if [[ -d "$task_dir/.cccc" ]]; then
+            local task_name=$(basename "$task_dir")
+            local status=$(cat "$task_dir/.cccc/status" 2>/dev/null || echo "unknown")
+            local has_plan=$([[ -f "$task_dir/PLAN.md" ]] && echo "✓" || echo "✗")
+            printf "  %-20s [%s] plan:%s\n" "$task_name" "$status" "$has_plan"
+        fi
+    done
+}
+
+delete_task() {
+    local task_name="$1"
+    local worktree_path="$(task_dir $task_name)"
+    
+    if [[ ! -d "$worktree_path" ]]; then
+        echo -e "${RED}Task not found: $task_name${NC}"
+        exit 1
+    fi
+    
+    echo -e "${YELLOW}Deleting task: $task_name${NC}"
+    
+    # Find the repo this worktree belongs to
+    local git_dir=$(cat "$worktree_path/.git" | sed 's/gitdir: //')
+    local repo_dir=$(dirname $(dirname $(dirname "$git_dir")))
+    
+    cd "$repo_dir" 2>/dev/null && git worktree remove "$worktree_path" --force 2>/dev/null || rm -rf "$worktree_path"
+    
+    echo -e "${GREEN}✓ Task deleted${NC}"
+}
+
+tail_logs() {
+    local task_name="$1"
+    local worktree_path="$(task_dir $task_name)"
+    
+    if [[ ! -d "$worktree_path/.cccc" ]]; then
+        echo -e "${RED}Task not found: $task_name${NC}"
+        exit 1
+    fi
+    
+    echo -e "${BLUE}Logs for: $task_name${NC}"
+    echo ""
+    
+    for log in "$worktree_path/.cccc"/*.log; do
+        if [[ -f "$log" ]]; then
+            echo -e "${YELLOW}=== $(basename $log) ===${NC}"
+            cat "$log"
+            echo ""
+        fi
+    done
+}
+
+# Main
+case "${1:-}" in
+    new)      new_task "$2" "$3" "$4" ;;
+    plan)     run_planner "$2" ;;
+    execute)  run_executor "$2" ;;
+    status)   show_status "$2" ;;
+    list)     list_tasks ;;
+    delete)   delete_task "$2" ;;
+    logs)     tail_logs "$2" ;;
+    help|-h)  usage ;;
+    *)        usage ;;
+esac

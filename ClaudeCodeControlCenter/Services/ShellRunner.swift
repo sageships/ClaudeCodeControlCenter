@@ -99,11 +99,19 @@ class ShellRunner: ObservableObject {
         
         // Create log file
         let logURL = URL(fileURLWithPath: logPath)
-        try? FileManager.default.createDirectory(
-            at: logURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+        let logDir = logURL.deletingLastPathComponent()
+        
+        // Ensure directory exists
+        try FileManager.default.createDirectory(
+            at: logDir,
+            withIntermediateDirectories: true,
+            attributes: nil
         )
-        FileManager.default.createFile(atPath: logPath, contents: nil)
+        
+        // Create the log file - use Data write which is more reliable
+        let emptyData = Data()
+        try emptyData.write(to: logURL)
+        
         let logHandle = try FileHandle(forWritingTo: logURL)
         
         let stdoutPipe = Pipe()

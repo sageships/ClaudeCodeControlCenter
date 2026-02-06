@@ -2,25 +2,58 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) var dismiss
+    @State private var saved = false
     
     var body: some View {
-        TabView {
-            GeneralSettingsTab()
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
+        VStack(spacing: 0) {
+            TabView {
+                GeneralSettingsTab()
+                    .tabItem {
+                        Label("General", systemImage: "gear")
+                    }
+                
+                AgentSettingsTab()
+                    .tabItem {
+                        Label("Agent", systemImage: "cpu")
+                    }
+                
+                PromptsSettingsTab()
+                    .tabItem {
+                        Label("Prompts", systemImage: "text.quote")
+                    }
+            }
             
-            AgentSettingsTab()
-                .tabItem {
-                    Label("Agent", systemImage: "cpu")
-                }
+            Divider()
             
-            PromptsSettingsTab()
-                .tabItem {
-                    Label("Prompts", systemImage: "text.quote")
+            // Footer with Save/Close buttons
+            HStack {
+                if saved {
+                    Label("Saved!", systemImage: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .transition(.opacity)
                 }
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+                
+                Button("Save & Close") {
+                    store.saveSettings()
+                    saved = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        dismiss()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return)
+            }
+            .padding()
         }
-        .frame(width: 600, height: 500)
+        .frame(width: 600, height: 550)
     }
 }
 

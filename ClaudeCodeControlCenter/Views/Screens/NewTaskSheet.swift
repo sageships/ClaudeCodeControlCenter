@@ -6,6 +6,7 @@ struct NewTaskSheet: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var title = ""
+    @State private var description = ""  // What to build
     @State private var baseBranch = ""
     @State private var branchName = ""
     @State private var branchNameManuallyEdited = false  // Track if user manually edited
@@ -17,7 +18,7 @@ struct NewTaskSheet: View {
     @State private var errorMessage: String?
     
     var canCreate: Bool {
-        !title.isEmpty && !baseBranch.isEmpty && !branchName.isEmpty
+        !title.isEmpty && !description.isEmpty && !baseBranch.isEmpty && !branchName.isEmpty
     }
     
     var body: some View {
@@ -48,7 +49,32 @@ struct NewTaskSheet: View {
                 } header: {
                     Text("Title")
                 } footer: {
-                    Text("Describe what you want to accomplish")
+                    Text("Short name for this task")
+                }
+                
+                Section {
+                    TextEditor(text: $description)
+                        .font(.body)
+                        .frame(minHeight: 100)
+                        .overlay(
+                            Group {
+                                if description.isEmpty {
+                                    Text("Describe what you want to build in detail...")
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 4)
+                                        .padding(.top, 8)
+                                        .allowsHitTesting(false)
+                                }
+                            },
+                            alignment: .topLeading
+                        )
+                } header: {
+                    HStack {
+                        Text("Description")
+                        Text("*").foregroundColor(.red)
+                    }
+                } footer: {
+                    Text("Be specific! This is what Claude will use to understand the task.")
                 }
                 
                 Section {
@@ -162,7 +188,7 @@ struct NewTaskSheet: View {
             }
             .padding()
         }
-        .frame(width: 550, height: 650)
+        .frame(width: 550, height: 750)
         .onAppear {
             baseBranch = workspace.defaultBaseBranch
         }
@@ -176,6 +202,7 @@ struct NewTaskSheet: View {
             do {
                 try await store.createWorkTask(
                     title: title,
+                    description: description,
                     workspace: workspace,
                     baseBranch: baseBranch,
                     branchName: branchName,

@@ -121,6 +121,7 @@ class AppStore: ObservableObject {
     
     func createWorkTask(
         title: String,
+        description: String,
         workspace: Workspace,
         baseBranch: String,
         branchName: String,
@@ -144,6 +145,7 @@ class AppStore: ObservableObject {
         // Create task
         let task = WorkTask(
             title: title,
+            description: description,
             workspaceId: workspace.id,
             baseBranch: baseBranch,
             branchName: branchName,
@@ -244,7 +246,18 @@ class AppStore: ObservableObject {
         
         // Build command
         let template = task.agentCommandTemplate ?? settings.agentCommandTemplate
-        let promptTemplate = session.phase == .planner ? settings.plannerPromptTemplate : settings.executorPromptTemplate
+        let basePromptTemplate = session.phase == .planner ? settings.plannerPromptTemplate : settings.executorPromptTemplate
+        
+        // Combine task description with prompt template
+        let promptTemplate = """
+        ## Task: \(task.title)
+        
+        ## Description:
+        \(task.description)
+        
+        ## Instructions:
+        \(basePromptTemplate)
+        """
         
         // Create prompt file
         let promptPath = "\(task.worktreePath)/.agent-prompt.txt"
@@ -437,15 +450,31 @@ class AppStore: ObservableObject {
     
     func openInTerminal(_ path: String) {
         let expandedPath = (path as NSString).expandingTildeInPath
-        let script = """
-        tell application "Terminal"
-            do script "cd '\(expandedPath)'"
-            activate
-        end tell
+        
+        // Create a temporary script that opens terminal at the path
+        let scriptPath = "/tmp/open-terminal-\(UUID().uuidString).command"
+        let scriptContent = """
+        #!/bin/bash
+        cd '\(expandedPath)'
+        exec $SHELL
         """
-        var error: NSDictionary?
-        if let scriptObject = NSAppleScript(source: script) {
-            scriptObject.executeAndReturnError(&error)
+        
+        do {
+            try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+            
+            // Make it executable
+            let chmod = Process()
+            chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmod.arguments = ["+x", scriptPath]
+            try chmod.run()
+            chmod.waitUntilExit()
+            
+            // Open the .command file which launches Terminal
+            NSWorkspace.shared.open(URL(fileURLWithPath: scriptPath))
+        } catch {
+            print("Failed to open terminal: \(error)")
+            // Fallback: just open the folder in Finder
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: expandedPath)
         }
     }
     

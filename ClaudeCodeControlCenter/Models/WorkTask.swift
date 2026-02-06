@@ -15,6 +15,7 @@ enum TaskMode: String, Codable, CaseIterable {
 struct WorkTask: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
+    var description: String  // Detailed description of what to build
     var workspaceId: UUID
     var baseBranch: String
     var branchName: String
@@ -27,6 +28,7 @@ struct WorkTask: Identifiable, Codable, Hashable {
     init(
         id: UUID = UUID(),
         title: String,
+        description: String = "",
         workspaceId: UUID,
         baseBranch: String,
         branchName: String,
@@ -38,6 +40,7 @@ struct WorkTask: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.title = title
+        self.description = description
         self.workspaceId = workspaceId
         self.baseBranch = baseBranch
         self.branchName = branchName

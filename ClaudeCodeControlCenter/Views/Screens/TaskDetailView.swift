@@ -74,6 +74,14 @@ struct TaskHeaderSection: View {
                     .cornerRadius(6)
             }
             
+            // Task description
+            if !task.description.isEmpty {
+                Text(task.description)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .padding(.vertical, 4)
+            }
+            
             HStack(spacing: 16) {
                 Label(task.branchName, systemImage: "arrow.branch")
                 Label(task.baseBranch, systemImage: "arrow.triangle.branch")

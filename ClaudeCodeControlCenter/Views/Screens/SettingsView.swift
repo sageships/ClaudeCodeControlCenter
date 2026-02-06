@@ -156,7 +156,7 @@ struct AgentSettingsTab: View {
                     
                     AgentPresetButton(
                         name: "Claude Code",
-                        command: "claude --print \"$(cat '{{promptFile}}')\" {{nonInteractiveFlag}}",
+                        command: "/opt/homebrew/bin/claude --print \"$(cat '{{promptFile}}')\" --output-format text {{nonInteractiveFlag}}",
                         flag: "--dangerously-skip-permissions",
                         store: store
                     )

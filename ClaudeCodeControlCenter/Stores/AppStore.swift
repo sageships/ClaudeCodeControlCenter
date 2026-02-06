@@ -274,8 +274,9 @@ class AppStore: ObservableObject {
             s.lastActivityAt = Date()
         }
         
-        // Run via shell to properly handle quoted paths and complex commands
-        let arguments = ["bash", "-c", command]
+        // Run via zsh login shell to inherit PATH from user's profile
+        // This ensures commands like 'claude' are found even if installed via homebrew/nvm
+        let arguments = ["zsh", "-l", "-c", command]
         
         do {
             try shell.runWithStreaming(
